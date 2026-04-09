@@ -1,11 +1,16 @@
 package tech.harrynull.universal_exporter.data
 
 import appeng.me.helpers.IGridProxyable
+import gregtech.api.util.LongData
 import gregtech.common.misc.GlobalVariableStorage.GlobalEnergy
+import gregtech.common.misc.WirelessNetworkManager
 import io.prometheus.metrics.core.metrics.Counter
 import io.prometheus.metrics.core.metrics.Gauge
+import kekztech.common.tileentities.MTELapotronicSuperCapacitor
 import net.minecraft.world.World
 import tech.harrynull.universal_exporter.data.MetricType.GAUGE
+import java.math.BigInteger
+import java.util.UUID
 
 private val registeredCounters = mutableMapOf<String, Counter>()
 private val registeredGauges = mutableMapOf<String, Gauge>()
@@ -123,6 +128,76 @@ fun updateMetrics(world: World) {
                         cpu.name?.takeIf { it.isNotBlank() } ?: "cpu$index",
                         *metric.labels.values.toTypedArray()
                     ).set(cpu.remainingItemCount.toDouble())
+                }
+            }
+
+            MetricType.LSC -> {
+                val obj = objectFromWorld(world, metric.x, metric.y, metric.z)
+                if (obj !is MTELapotronicSuperCapacitor) continue
+
+                fun lscField(name: String) = getAllFieldsIncludingInherited(obj.javaClass)
+                    .first { it.name == name }.also { it.isAccessible = true }
+
+                @Suppress("UNCHECKED_CAST")
+                fun <T> fieldValue(name: String): T = lscField(name).get(obj) as T
+
+                val pos = "${metric.x},${metric.y},${metric.z}"
+                val customLabelKeys = metric.labels.keys.toTypedArray()
+                val customLabelValues = metric.labels.values.toTypedArray()
+
+                fun setGauge(suffix: String, help: String, value: Double) {
+                    val key = "${metric.name}_$suffix"
+                    registeredGauges.getOrPut(key) {
+                        Gauge.builder().name(key).help(help)
+                            .labelNames("pos", *customLabelKeys).register()
+                    }.labelValues(pos, *customLabelValues).set(value)
+                }
+
+                setGauge("stored", "Current EU stored in LSC",
+                    fieldValue<BigInteger>("stored").toDouble())
+                setGauge("capacity", "Total EU capacity of LSC",
+                    fieldValue<BigInteger>("capacity").toDouble())
+                setGauge("passive_drain_per_tick", "EU/t passive discharge",
+                    fieldValue<Long>("passiveDischargeAmount").toDouble())
+                setGauge("input_last_tick", "EU input last tick",
+                    fieldValue<Long>("inputLastTick").toDouble())
+                setGauge("output_last_tick", "EU output last tick",
+                    fieldValue<Long>("outputLastTick").toDouble())
+                setGauge("max_eu_in", "Max EU/t input rate",
+                    fieldValue<Long>("mMaxEUIn").toDouble())
+                setGauge("max_eu_out", "Max EU/t output rate",
+                    fieldValue<Long>("mMaxEUOut").toDouble())
+                setGauge("wireless_mode", "1 if wireless mode is enabled",
+                    if (fieldValue<Boolean>("wireless_mode")) 1.0 else 0.0)
+
+                setGauge("avg_input_100t", "Average EU/t input over last 100 ticks",
+                    fieldValue<LongData>("energyInputValues").avgLong().toDouble())
+                setGauge("avg_output_100t", "Average EU/t output over last 100 ticks",
+                    fieldValue<LongData>("energyOutputValues").avgLong().toDouble())
+                setGauge("avg_input_5m", "Average EU/t input over last 5 minutes",
+                    fieldValue<LongData>("energyInputValues5m").avgLong().toDouble())
+                setGauge("avg_output_5m", "Average EU/t output over last 5 minutes",
+                    fieldValue<LongData>("energyOutputValues5m").avgLong().toDouble())
+                setGauge("avg_input_1h", "Average EU/t input over last hour",
+                    fieldValue<LongData>("energyInputValues1h").avgLong().toDouble())
+                setGauge("avg_output_1h", "Average EU/t output over last hour",
+                    fieldValue<LongData>("energyOutputValues1h").avgLong().toDouble())
+
+                val uuid = fieldValue<UUID?>("global_energy_user_uuid")
+                if (uuid != null) {
+                    setGauge("wireless_stored", "EU stored in wireless network",
+                        WirelessNetworkManager.getUserEU(uuid).toDouble())
+                }
+
+                val capGaugeKey = "${metric.name}_capacitors"
+                val capGauge = registeredGauges.getOrPut(capGaugeKey) {
+                    Gauge.builder().name(capGaugeKey).help("LSC capacitor count by tier")
+                        .labelNames("pos", "tier", *customLabelKeys).register()
+                }
+                val capacitors = fieldValue<IntArray>("capacitors")
+                for (capacitor in MTELapotronicSuperCapacitor.Capacitor.VALUES) {
+                    capGauge.labelValues(pos, capacitor.name, *customLabelValues)
+                        .set(capacitors[capacitor.ordinal].toDouble())
                 }
             }
 

@@ -4,6 +4,8 @@ import appeng.me.helpers.IGridProxyable
 import com.cleanroommc.modularui.api.IGuiHolder
 import com.cleanroommc.modularui.factory.AbstractUIFactory
 import com.cleanroommc.modularui.factory.GuiManager
+import gregtech.api.metatileentity.BaseMetaTileEntity
+import kekztech.common.tileentities.MTELapotronicSuperCapacitor
 import net.minecraft.entity.player.EntityPlayer
 import net.minecraft.entity.player.EntityPlayerMP
 import net.minecraft.network.PacketBuffer
@@ -16,11 +18,12 @@ class ConfigureUIFactory(name: String) : AbstractUIFactory<ConfigureUIData>(name
     fun open(player: EntityPlayerMP, x: Int, y: Int, z: Int) {
         val tile = player.entityWorld.getTileEntity(x, y, z)
         val aeEnabled = tile is IGridProxyable && tile.proxy != null
-        GuiManager.open(this, ConfigureUIData(player, x, y, z, aeEnabled), player)
+        val lscEnabled = tile is BaseMetaTileEntity && tile.metaTileEntity is MTELapotronicSuperCapacitor
+        GuiManager.open(this, ConfigureUIData(player, x, y, z, aeEnabled, lscEnabled), player)
     }
 
     override fun readGuiData(player: EntityPlayer, buffer: PacketBuffer): ConfigureUIData {
-        return ConfigureUIData(player, buffer.readInt(), buffer.readInt(), buffer.readInt(), buffer.readBoolean())
+        return ConfigureUIData(player, buffer.readInt(), buffer.readInt(), buffer.readInt(), buffer.readBoolean(), buffer.readBoolean())
     }
 
     override fun writeGuiData(guiData: ConfigureUIData, buffer: PacketBuffer) {
@@ -28,6 +31,7 @@ class ConfigureUIFactory(name: String) : AbstractUIFactory<ConfigureUIData>(name
         buffer.writeInt(guiData.y)
         buffer.writeInt(guiData.z)
         buffer.writeBoolean(guiData.aeEnabled)
+        buffer.writeBoolean(guiData.lscEnabled)
     }
 
     companion object {

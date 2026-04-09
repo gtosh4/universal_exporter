@@ -9,4 +9,5 @@ class ConfigureUIData(
     val y: Int,
     val z: Int,
     val aeEnabled: Boolean,
+    val lscEnabled: Boolean,
 ) : GuiData(player)

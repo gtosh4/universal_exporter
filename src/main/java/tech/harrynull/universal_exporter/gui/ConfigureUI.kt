@@ -99,6 +99,7 @@ class ConfigureUI : IGuiHolder<ConfigureUIData> {
             )
         )
         .addPage(TextWidget("AE items, fluids and CPU will be exported"))
+        .addPage(TextWidget("LSC energy, averages, and capacitor counts will be exported"))
         .controller(pagedWidgetController)
 
     override fun buildUI(data: ConfigureUIData, syncManager: PanelSyncManager, settings: UISettings): ModularPanel {
@@ -136,6 +137,9 @@ class ConfigureUI : IGuiHolder<ConfigureUIData> {
                         .apply {
                             for (type in MetricType.entries) {
                                 if (type == MetricType.AE && !data.aeEnabled) {
+                                    continue
+                                }
+                                if (type == MetricType.LSC && !data.lscEnabled) {
                                     continue
                                 }
                                 child(

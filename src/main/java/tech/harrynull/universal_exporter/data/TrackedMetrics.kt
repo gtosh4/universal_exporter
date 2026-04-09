@@ -12,6 +12,7 @@ enum class MetricType {
     GAUGE,
     COUNTER,
     AE,
+    LSC,
 }
 
 fun tagsStringToMap(tags: String): Map<String, String> {
