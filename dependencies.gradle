@@ -40,6 +40,8 @@ dependencies {
     implementation("com.github.GTNewHorizons:ModularUI2:2.2.18-1.7.10:dev")
     implementation("com.github.GTNewHorizons:StorageDrawers:2.1.8-GTNH:dev")
 
+    compileOnly("com.github.GTNewHorizons:ServerUtilities:2.2.20:dev")
+
     shadowImplementation('io.prometheus:prometheus-metrics-core:1.4.1')
     shadowImplementation('io.prometheus:prometheus-metrics-exporter-httpserver:1.4.1')
 }

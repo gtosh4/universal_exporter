@@ -7,8 +7,11 @@ import gregtech.common.misc.WirelessNetworkManager
 import io.prometheus.metrics.core.metrics.Counter
 import io.prometheus.metrics.core.metrics.Gauge
 import kekztech.common.tileentities.MTELapotronicSuperCapacitor
+import net.minecraft.server.MinecraftServer
 import net.minecraft.world.World
+import tech.harrynull.universal_exporter.Config
 import tech.harrynull.universal_exporter.data.MetricType.GAUGE
+import java.lang.management.ManagementFactory
 import java.math.BigInteger
 import java.util.UUID
 
@@ -18,6 +21,66 @@ private val globalEnergyGauge: Gauge = Gauge.builder()
     .name("global_energy")
     .labelNames("player")
     .register()
+private val tpsGauge: Gauge = Gauge.builder()
+    .name("tps")
+    .help("Server ticks per second (derived from recent tick times)")
+    .register()
+private val msptGauge: Gauge = Gauge.builder()
+    .name("mspt")
+    .help("Average milliseconds per tick")
+    .register()
+private val onlinePlayersGauge: Gauge = Gauge.builder()
+    .name("online_players")
+    .help("1 if player is online, 0 if offline")
+    .labelNames("player")
+    .register()
+private val knownPlayers = mutableSetOf<String>()
+private val loadedChunksGauge: Gauge = Gauge.builder()
+    .name("loaded_chunks")
+    .help("Number of loaded chunks per dimension")
+    .labelNames("dim")
+    .register()
+private val entityCountGauge: Gauge = Gauge.builder()
+    .name("entity_count")
+    .help("Number of loaded entities per dimension")
+    .labelNames("dim")
+    .register()
+private val tileEntityCountGauge: Gauge = Gauge.builder()
+    .name("tile_entity_count")
+    .help("Number of loaded tile entities per dimension")
+    .labelNames("dim")
+    .register()
+private val dimMsptGauge: Gauge = Gauge.builder()
+    .name("dim_mspt")
+    .help("Average milliseconds per tick per dimension")
+    .labelNames("dim")
+    .register()
+private val jvmHeapUsedGauge: Gauge = Gauge.builder()
+    .name("jvm_heap_used_bytes")
+    .help("JVM heap memory used in bytes")
+    .register()
+private val jvmHeapMaxGauge: Gauge = Gauge.builder()
+    .name("jvm_heap_max_bytes")
+    .help("JVM heap memory max in bytes")
+    .register()
+private val gcPauseGauge: Gauge = Gauge.builder()
+    .name("jvm_gc_pause_seconds")
+    .help("Total GC pause time in seconds")
+    .labelNames("gc")
+    .register()
+private val teamClaimedChunksGauge: Gauge = Gauge.builder()
+    .name("team_claimed_chunks")
+    .help("Number of chunks claimed per team")
+    .labelNames("team")
+    .register()
+private val teamLoadedChunksGauge: Gauge = Gauge.builder()
+    .name("team_loaded_chunks")
+    .help("Number of force-loaded chunks per team")
+    .labelNames("team")
+    .register()
+private val serverUtilitiesAvailable by lazy {
+    cpw.mods.fml.common.Loader.isModLoaded("serverutilities")
+}
 
 fun updateCounter(world: World, x: Int, y: Int, z: Int, type: String, amount: Double = 1.0) {
     val metric = TrackedMetrics.get(world).getMetrics().find {
@@ -34,14 +97,58 @@ fun updateCounter(world: World, x: Int, y: Int, z: Int, type: String, amount: Do
     TrackedMetrics.setMetricActive(metric)
 }
 
-fun updateGlobalEnergyGauge() {
-    GlobalEnergy.forEach { user, energy ->
+fun updateGlobalMetrics() {
+    val cfg = Config.GlobalMetrics
+    if (cfg.globalEnergy) GlobalEnergy.forEach { user, energy ->
         globalEnergyGauge.labelValues(user.toString()).set(energy.toDouble())
+    }
+    val server = MinecraftServer.getServer()
+    val avgMspt = server.tickTimeArray.average() / 1_000_000.0
+    if (cfg.tps) tpsGauge.set(minOf(1000.0 / avgMspt, 20.0))
+    if (cfg.mspt) msptGauge.set(avgMspt)
+    if (cfg.onlinePlayers) {
+        @Suppress("UNCHECKED_CAST")
+        val onlinePlayers = (server.configurationManager.playerEntityList as List<net.minecraft.entity.player.EntityPlayerMP>)
+            .map { it.commandSenderName }.toSet()
+        knownPlayers.addAll(onlinePlayers)
+        knownPlayers.forEach { player ->
+            onlinePlayersGauge.labelValues(player).set(if (player in onlinePlayers) 1.0 else 0.0)
+        }
+    }
+    if (cfg.jvmHeap) {
+        val runtime = Runtime.getRuntime()
+        jvmHeapUsedGauge.set((runtime.totalMemory() - runtime.freeMemory()).toDouble())
+        jvmHeapMaxGauge.set(runtime.maxMemory().toDouble())
+    }
+    if (cfg.gcPause) ManagementFactory.getGarbageCollectorMXBeans().forEach { gc ->
+        if (gc.collectionTime >= 0) gcPauseGauge.labelValues(gc.name).set(gc.collectionTime / 1000.0)
+    }
+    if (cfg.serverUtilitiesTeams && serverUtilitiesAvailable) {
+        updateServerUtilitiesMetrics()
     }
 }
 
+private fun updateServerUtilitiesMetrics() {
+    if (!serverutils.data.ClaimedChunks.isActive()) return
+    val universe = serverutils.lib.data.Universe.get() ?: return
+    for (team in universe.teams) {
+        if (!team.isValid) continue
+        val chunks = serverutils.data.ServerUtilitiesTeamData.get(team).teamChunks
+        teamClaimedChunksGauge.labelValues(team.id).set(chunks.size.toDouble())
+        teamLoadedChunksGauge.labelValues(team.id).set(chunks.count { it.isLoaded }.toDouble())
+    }
+}
+
+@Suppress("UNCHECKED_CAST")
 fun updateMetrics(world: World) {
-    updateGlobalEnergyGauge()
+    updateGlobalMetrics()
+    val cfg = Config.GlobalMetrics
+    val dim = world.provider.getDimensionName()
+    if (cfg.loadedChunks) loadedChunksGauge.labelValues(dim).set(world.chunkProvider.loadedChunkCount.toDouble())
+    if (cfg.entityCount) entityCountGauge.labelValues(dim).set((world.loadedEntityList as List<*>).size.toDouble())
+    if (cfg.tileEntityCount) tileEntityCountGauge.labelValues(dim).set((world.loadedTileEntityList as List<*>).size.toDouble())
+    if (cfg.dimMspt) MinecraftServer.getServer().worldTickTimes[world.provider.dimensionId]
+        ?.let { dimMsptGauge.labelValues(dim).set(it.average() / 1_000_000.0) }
     val metrics = TrackedMetrics.get(world)
     for (metric in metrics.getMetrics()) {
         when (metric.type) {
@@ -77,12 +184,13 @@ fun updateMetrics(world: World) {
                 if (obj !is IGridProxyable) {
                     continue
                 }
+                try {
                 val itemGaugeKey = "${metric.name}_items"
                 val itemGauge = registeredGauges.getOrPut(itemGaugeKey) {
                     Gauge.builder()
                         .name(itemGaugeKey)
                         .help("Number of items in AE system")
-                        .labelNames("pos", "item", *metric.labels.keys.toTypedArray())
+                        .labelNames("pos", "exporter", "item", *metric.labels.keys.toTypedArray())
                         .register()
                 }
                 obj.proxy.storage.itemInventory.storageList.forEach { itemStack ->
@@ -90,6 +198,7 @@ fun updateMetrics(world: World) {
                     itemGauge
                         .labelValues(
                             "${metric.x},${metric.y},${metric.z}",
+                            metric.name,
                             itemStack.itemStack.displayName,
                             *metric.labels.values.toTypedArray()
                         )
@@ -100,7 +209,7 @@ fun updateMetrics(world: World) {
                     Gauge.builder()
                         .name(fluidGaugeKey)
                         .help("Number of fluids in AE system")
-                        .labelNames("pos", "fluid", *metric.labels.keys.toTypedArray())
+                        .labelNames("pos", "exporter", "fluid", *metric.labels.keys.toTypedArray())
                         .register()
                 }
                 obj.proxy.storage.fluidInventory.storageList.forEach { fluidStack ->
@@ -108,6 +217,7 @@ fun updateMetrics(world: World) {
                     fluidGauge
                         .labelValues(
                             "${metric.x},${metric.y},${metric.z}",
+                            metric.name,
                             fluidStack.fluidStack.localizedName,
                             *metric.labels.values.toTypedArray()
                         )
@@ -118,17 +228,19 @@ fun updateMetrics(world: World) {
                     Gauge.builder()
                         .name(cpuGaugeKey)
                         .help("AE CPU usage")
-                        .labelNames("pos", "cpu", *metric.labels.keys.toTypedArray())
+                        .labelNames("pos", "exporter", "cpu", *metric.labels.keys.toTypedArray())
                         .register()
                 }
 
                 obj.proxy.crafting.cpus.forEachIndexed { index: Int, cpu ->
                     cpuGauge.labelValues(
                         "${metric.x},${metric.y},${metric.z}",
+                        metric.name,
                         cpu.name?.takeIf { it.isNotBlank() } ?: "cpu$index",
                         *metric.labels.values.toTypedArray()
                     ).set(cpu.remainingItemCount.toDouble())
                 }
+                } catch (_: appeng.me.GridAccessException) { continue }
             }
 
             MetricType.LSC -> {
@@ -149,8 +261,8 @@ fun updateMetrics(world: World) {
                     val key = "${metric.name}_$suffix"
                     registeredGauges.getOrPut(key) {
                         Gauge.builder().name(key).help(help)
-                            .labelNames("pos", *customLabelKeys).register()
-                    }.labelValues(pos, *customLabelValues).set(value)
+                            .labelNames("pos", "exporter", *customLabelKeys).register()
+                    }.labelValues(pos, metric.name, *customLabelValues).set(value)
                 }
 
                 setGauge("stored", "Current EU stored in LSC",
@@ -192,11 +304,11 @@ fun updateMetrics(world: World) {
                 val capGaugeKey = "${metric.name}_capacitors"
                 val capGauge = registeredGauges.getOrPut(capGaugeKey) {
                     Gauge.builder().name(capGaugeKey).help("LSC capacitor count by tier")
-                        .labelNames("pos", "tier", *customLabelKeys).register()
+                        .labelNames("pos", "exporter", "tier", *customLabelKeys).register()
                 }
                 val capacitors = fieldValue<IntArray>("capacitors")
                 for (capacitor in MTELapotronicSuperCapacitor.Capacitor.VALUES) {
-                    capGauge.labelValues(pos, capacitor.name, *customLabelValues)
+                    capGauge.labelValues(pos, metric.name, capacitor.name, *customLabelValues)
                         .set(capacitors[capacitor.ordinal].toDouble())
                 }
             }

@@ -61,6 +61,9 @@ class ListAllUI : IGuiHolder<GuiData> {
                     for (i in 0 until count) {
                         lateinit var firstLine: TextWidget
                         val metric = TrackedMetric(buf.readNBTTagCompoundFromBuffer()!!)
+                        val isActive = buf.readBoolean()
+                        val lastUpdated = buf.readLong().takeIf { it != -1L }
+                            ?.let { java.time.Instant.ofEpochSecond(it) }
                         list.child(
                             Flow.column()
                                 .child(
@@ -74,15 +77,14 @@ class ListAllUI : IGuiHolder<GuiData> {
                                     Flow.row().child(
                                         TextWidget("${metric.labels}")
                                     ).also {
-                                        if (!TrackedMetrics.isMetricActive(metric)) {
+                                        if (!isActive) {
                                             it.child(
                                                 TextWidget(if (metric.type == MetricType.COUNTER) "Inactive" else "Invalid")
                                                     .alignX(Alignment.CenterRight)
                                                     .paddingRight(60)
                                                     .color(if (metric.type == MetricType.COUNTER) Color.GREY.main else Color.ORANGE.main)
                                                     .tooltip { tooltip ->
-                                                        val lastUpdated = TrackedMetrics.lastUpdated(metric)
-                                                        tooltip
+                                                                    tooltip
                                                             .add("Last Updated $lastUpdated")
                                                             .newLine()
                                                             .buildTooltip()
@@ -120,6 +122,8 @@ class ListAllUI : IGuiHolder<GuiData> {
                         buf!!.writeInt(metrics.size)
                         for (metric in metrics) {
                             buf.writeNBTTagCompoundToBuffer(NBTTagCompound().apply { metric.writeToNBT(this) })
+                            buf.writeBoolean(TrackedMetrics.isMetricActive(metric))
+                            buf.writeLong(TrackedMetrics.lastUpdated(metric)?.epochSecond ?: -1L)
                         }
                     }
                 }
