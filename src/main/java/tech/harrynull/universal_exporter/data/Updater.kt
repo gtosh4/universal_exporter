@@ -185,7 +185,8 @@ fun updateMetrics(world: World) {
                     continue
                 }
                 try {
-                val itemGaugeKey = "${metric.name}_items"
+                val prefix = if (Config.noMetricNamePrefix) "ae" else metric.name
+                val itemGaugeKey = "${prefix}_items"
                 val itemGauge = registeredGauges.getOrPut(itemGaugeKey) {
                     Gauge.builder()
                         .name(itemGaugeKey)
@@ -204,7 +205,7 @@ fun updateMetrics(world: World) {
                         )
                         .set(count.toDouble())
                 }
-                val fluidGaugeKey = "${metric.name}_fluids"
+                val fluidGaugeKey = "${prefix}_fluids"
                 val fluidGauge = registeredGauges.getOrPut(fluidGaugeKey) {
                     Gauge.builder()
                         .name(fluidGaugeKey)
@@ -223,7 +224,7 @@ fun updateMetrics(world: World) {
                         )
                         .set(count.toDouble())
                 }
-                val cpuGaugeKey = "${metric.name}_cpus"
+                val cpuGaugeKey = "${prefix}_cpus"
                 val cpuGauge = registeredGauges.getOrPut(cpuGaugeKey) {
                     Gauge.builder()
                         .name(cpuGaugeKey)
@@ -257,8 +258,9 @@ fun updateMetrics(world: World) {
                 val customLabelKeys = metric.labels.keys.toTypedArray()
                 val customLabelValues = metric.labels.values.toTypedArray()
 
+                val lscPrefix = if (Config.noMetricNamePrefix) "lsc" else metric.name
                 fun setGauge(suffix: String, help: String, value: Double) {
-                    val key = "${metric.name}_$suffix"
+                    val key = "${lscPrefix}_$suffix"
                     registeredGauges.getOrPut(key) {
                         Gauge.builder().name(key).help(help)
                             .labelNames("pos", "exporter", *customLabelKeys).register()
@@ -301,7 +303,7 @@ fun updateMetrics(world: World) {
                         WirelessNetworkManager.getUserEU(uuid).toDouble())
                 }
 
-                val capGaugeKey = "${metric.name}_capacitors"
+                val capGaugeKey = "${lscPrefix}_capacitors"
                 val capGauge = registeredGauges.getOrPut(capGaugeKey) {
                     Gauge.builder().name(capGaugeKey).help("LSC capacitor count by tier")
                         .labelNames("pos", "exporter", "tier", *customLabelKeys).register()

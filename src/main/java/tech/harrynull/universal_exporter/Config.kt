@@ -7,6 +7,7 @@ object Config {
     var host: String = "0.0.0.0"
     var port: Int = 9400
     var updateIntervalTicks: Int = 100
+    var noMetricNamePrefix: Boolean = false
 
     object GlobalMetrics {
         var globalEnergy: Boolean = true
@@ -49,6 +50,12 @@ object Config {
             1,
             Integer.MAX_VALUE,
             "Gauge value update intervals"
+        )
+        noMetricNamePrefix = configuration.getBoolean(
+            "noMetricNamePrefix",
+            Configuration.CATEGORY_GENERAL,
+            false,
+            "When enabled, metric names are not prefixed with the exporter name. Use the 'exporter' label to identify which instance a metric belongs to."
         )
 
         GlobalMetrics.globalEnergy = configuration.getBoolean("globalEnergy", CATEGORY_GLOBAL_METRICS, true, "Export global wireless energy per player")
