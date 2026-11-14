@@ -224,22 +224,37 @@ fun updateMetrics(world: World) {
                         )
                         .set(count.toDouble())
                 }
-                val cpuGaugeKey = "${prefix}_cpus"
+                val cpuGaugeKey = "${prefix}_cpus_remaining_item_count"
                 val cpuGauge = registeredGauges.getOrPut(cpuGaugeKey) {
                     Gauge.builder()
                         .name(cpuGaugeKey)
-                        .help("AE CPU usage")
+                        .help("AE CPU remaining item count")
+                        .labelNames("pos", "exporter", "cpu", *metric.labels.keys.toTypedArray())
+                        .register()
+                }
+                val cpuBusyGaugeKey = "${prefix}_cpus_busy"
+                val cpuBusyGauge = registeredGauges.getOrPut(cpuBusyGaugeKey) {
+                    Gauge.builder()
+                        .name(cpuBusyGaugeKey)
+                        .help("1 if AE CPU is busy, 0 if idle")
+                        .labelNames("pos", "exporter", "cpu", *metric.labels.keys.toTypedArray())
+                        .register()
+                }
+                val cpuStartGaugeKey = "${prefix}_cpus_start_item_count"
+                val cpuStartGauge = registeredGauges.getOrPut(cpuStartGaugeKey) {
+                    Gauge.builder()
+                        .name(cpuStartGaugeKey)
+                        .help("AE CPU total item count when job started")
                         .labelNames("pos", "exporter", "cpu", *metric.labels.keys.toTypedArray())
                         .register()
                 }
 
                 obj.proxy.crafting.cpus.forEachIndexed { index: Int, cpu ->
-                    cpuGauge.labelValues(
-                        "${metric.x},${metric.y},${metric.z}",
-                        metric.name,
-                        cpu.name?.takeIf { it.isNotBlank() } ?: "cpu$index",
-                        *metric.labels.values.toTypedArray()
-                    ).set(cpu.remainingItemCount.toDouble())
+                    val cpuName = cpu.name?.takeIf { it.isNotBlank() } ?: "cpu$index"
+                    val labelValues = arrayOf("${metric.x},${metric.y},${metric.z}", metric.name, cpuName, *metric.labels.values.toTypedArray())
+                    cpuGauge.labelValues(*labelValues).set(cpu.remainingItemCount.toDouble())
+                    cpuBusyGauge.labelValues(*labelValues).set(if (cpu.isBusy) 1.0 else 0.0)
+                    cpuStartGauge.labelValues(*labelValues).set(cpu.startItemCount.toDouble())
                 }
                 } catch (_: appeng.me.GridAccessException) { continue }
             }
