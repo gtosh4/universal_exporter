@@ -73,7 +73,7 @@ class ConfigureUI : IGuiHolder<ConfigureUIData> {
                                             }
                                         }
 
-                                    })
+                                    }).allowC2S()
                             ).width(200).height(10)
                         ).height(20)
                 ).child(
@@ -91,7 +91,7 @@ class ConfigureUI : IGuiHolder<ConfigureUIData> {
                             StringSyncValue(
                                 { trigger },
                                 { newTrigger -> trigger = newTrigger }
-                            )
+                            ).allowC2S()
                         ).width(200).height(10)
                     ).height(30)
             ).child(
@@ -115,7 +115,7 @@ class ConfigureUI : IGuiHolder<ConfigureUIData> {
                             TextFieldWidget().value(
                                 StringSyncValue(
                                     { name },
-                                    { newName -> name = newName })
+                                    { newName -> name = newName }).allowC2S()
                             ).width(200).height(10)
                         )
                         .height(20)
@@ -127,7 +127,7 @@ class ConfigureUI : IGuiHolder<ConfigureUIData> {
                             TextFieldWidget().value(
                                 StringSyncValue(
                                     { labelString },
-                                    { newLabelString -> labelString = newLabelString })
+                                    { newLabelString -> labelString = newLabelString }).allowC2S()
                             ).width(200).height(10)
                         )
                         .height(20)
@@ -154,7 +154,7 @@ class ConfigureUI : IGuiHolder<ConfigureUIData> {
                                                         pagedWidgetController.setPage(type.ordinal)
                                                     }
                                                 }
-                                            })
+                                            }).allowC2S()
                                     ).size(10)
                                 )
                                 child(TextWidget(type.name).width(50).paddingLeft(5))
@@ -201,7 +201,11 @@ class ConfigureUI : IGuiHolder<ConfigureUIData> {
     }
 
     @OptIn(ExperimentalUuidApi::class)
-    inner class VariableHintSyncManager(private val x: Int, private val y: Int, private val z: Int) : SyncHandler() {
+    inner class VariableHintSyncManager(private val x: Int, private val y: Int, private val z: Int) : SyncHandler<VariableHintSyncManager>() {
+        init {
+            allowC2S()
+        }
+
         override fun readOnClient(id: Int, buf: PacketBuffer) {
             when (id) {
                 SyncIDs.SEARCH_RESULTS.id -> {

@@ -53,7 +53,11 @@ class ListAllUI : IGuiHolder<GuiData> {
     }
 
     @OptIn(ExperimentalUuidApi::class)
-    inner class ListAllUISyncHandler : SyncHandler() {
+    inner class ListAllUISyncHandler : SyncHandler<ListAllUISyncHandler>() {
+        init {
+            allowC2S()
+        }
+
         override fun readOnClient(id: Int, buf: PacketBuffer?) {
             when (id) {
                 SyncIDs.ANSWER.id -> {
